@@ -5,10 +5,17 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.inject.Inject;
+
+import com.google.common.collect.Table;
+import lombok.Value;
 
 import net.runelite.api.Client;
 import net.runelite.api.ItemComposition;
@@ -175,12 +182,25 @@ public class GroundItemIconsOverlay extends Overlay
                         continue;
                     }
 
+                    final List<TileItem> displayableItems = new ArrayList<>();
+
                     for (TileItem item : tile.getGroundItems())
                     {
-                        if (!shouldDisplayItem(item))
+                        if (shouldDisplayItem(item))
                         {
-                            continue;
+                            displayableItems.add(item);
                         }
+                    }
+
+                    final List<GroupedGroundItem> groups =
+                        orderToMatch(
+                            groupByItemId(displayableItems),
+                            orderedItemIdsAt(worldPoint));
+
+                    for (GroupedGroundItem grouped : groups)
+                    {
+                        final TileItem item = grouped.getRepresentative();
+                        final int totalQuantity = grouped.getTotalQuantity();
 
                         final ItemComposition itemComposition =
                             itemManager.getItemComposition(
@@ -194,7 +214,8 @@ public class GroundItemIconsOverlay extends Overlay
                         final String itemString =
                             buildItemString(
                                 item,
-                                itemComposition);
+                                itemComposition,
+                                totalQuantity);
 
                         final int offset =
                             offsetMap.compute(
@@ -214,11 +235,6 @@ public class GroundItemIconsOverlay extends Overlay
                                     : OFFSET_Z);
 
                         if (textPoint == null)
-                        {
-                            continue;
-                        }
-
-                        if (offset > 0)
                         {
                             continue;
                         }
@@ -263,24 +279,138 @@ public class GroundItemIconsOverlay extends Overlay
         return null;
     }
 
+    /**
+     * Groups {@code items} by item ID, summing quantities into a single entry per ID.
+     * <p>The game can spawn multiple separate {@link TileItem} entries for what renders as a
+     * single ground item pile (e.g. dropping a stack of unstackable food) - RuneLite's own core
+     * {@code GroundItemsPlugin} sums quantities the same way for this exact reason. Without this
+     * grouping, each entry got its own icon, stacking N duplicate icons on a pile of N items
+     * instead of drawing one icon with the combined quantity.
+     * <p>The representative kept for each group is simply the first entry encountered - only
+     * {@link TileItem#getId()} is used afterwards (icon image, price lookups), which is identical
+     * across every entry in the group by construction.
+     */
+    static List<GroupedGroundItem> groupByItemId(Collection<TileItem> items)
+    {
+        final Map<Integer, TileItem> firstItemById = new LinkedHashMap<>();
+        final Map<Integer, Integer> quantityById = new LinkedHashMap<>();
+
+        for (TileItem item : items)
+        {
+            firstItemById.putIfAbsent(item.getId(), item);
+            quantityById.merge(item.getId(), item.getQuantity(), Integer::sum);
+        }
+
+        final List<GroupedGroundItem> grouped = new ArrayList<>();
+
+        for (Map.Entry<Integer, TileItem> entry : firstItemById.entrySet())
+        {
+            grouped.add(
+                new GroupedGroundItem(
+                    entry.getValue(),
+                    quantityById.get(entry.getKey())));
+        }
+
+        return grouped;
+    }
+
+    @Value
+    static class GroupedGroundItem
+    {
+        TileItem representative;
+        int totalQuantity;
+    }
+
     private boolean isGroundItemsHidden()
+    {
+        final GroundItemsPlugin groundItemsPlugin = findGroundItemsPlugin();
+
+        if (groundItemsPlugin == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return (Boolean) isHideAllMethod.invoke(groundItemsPlugin);
+        }
+        catch (ReflectiveOperationException e)
+        {
+            return false;
+        }
+    }
+
+    private GroundItemsPlugin findGroundItemsPlugin()
     {
         for (Plugin plugin : pluginManager.getPlugins())
         {
             if (plugin instanceof GroundItemsPlugin)
             {
-                try
-                {
-                    return (Boolean) isHideAllMethod.invoke(plugin);
-                }
-                catch (ReflectiveOperationException e)
-                {
-                    return false;
-                }
+                return (GroundItemsPlugin) plugin;
             }
         }
 
-        return false;
+        return null;
+    }
+
+    /**
+     * @return the item IDs present at {@code worldPoint} in the exact order the core {@code
+     *         GroundItemsPlugin} assigns its own text-stacking offsets, or an empty list if that
+     *         plugin isn't loaded or has nothing recorded there yet.
+     * <p>{@code GroundItemsPlugin} keeps its own {@code Table<WorldPoint, Integer, GroundItem>} of
+     * everything it has seen (accumulated from spawn events over time), and stacks its text lines
+     * in the iteration order of that table's per-tile row - which has no relationship to the order
+     * {@link Tile#getGroundItems()} happens to return in the current frame. Icons drawn using our
+     * own scan order therefore don't line up with the text row they belong to whenever a tile holds
+     * more than one distinct item.
+     * <p>{@code GroundItemsPlugin#getCollectedGroundItems()} is public and returns that same table,
+     * but its value type ({@code GroundItem}) is package-private, so it can't be named here. Only
+     * the row keys (item IDs, {@link Integer} - a public type) are read, via a raw {@code Table}
+     * reference to sidestep that - no reflection needed, since the method and the key type are both
+     * accessible even though the value type isn't.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private List<Integer> orderedItemIdsAt(WorldPoint worldPoint)
+    {
+        final GroundItemsPlugin groundItemsPlugin = findGroundItemsPlugin();
+
+        if (groundItemsPlugin == null)
+        {
+            return List.of();
+        }
+
+        final Table table = groundItemsPlugin.getCollectedGroundItems();
+        final Map row = table.row(worldPoint);
+
+        return new ArrayList<Integer>(row.keySet());
+    }
+
+    /**
+     * @return {@code groups} reordered so that groups whose representative item ID appears in
+     *         {@code referenceOrder} come first, in that same relative order - any group whose item
+     *         isn't in {@code referenceOrder} (e.g. {@code GroundItemsPlugin} isn't loaded, or
+     *         hasn't recorded that tile yet) keeps its original relative position at the end, so
+     *         icons still render instead of silently disappearing.
+     */
+    static List<GroupedGroundItem> orderToMatch(
+        List<GroupedGroundItem> groups,
+        List<Integer> referenceOrder)
+    {
+        final Map<Integer, Integer> priorityByItemId = new HashMap<>();
+
+        for (int i = 0; i < referenceOrder.size(); i++)
+        {
+            priorityByItemId.putIfAbsent(referenceOrder.get(i), i);
+        }
+
+        final List<GroupedGroundItem> sorted = new ArrayList<>(groups);
+        sorted.sort(
+            Comparator.comparingInt(
+                g -> priorityByItemId.getOrDefault(
+                    g.getRepresentative().getId(),
+                    Integer.MAX_VALUE)));
+
+        return sorted;
     }
 
     private boolean shouldDisplayItem(TileItem item)
@@ -491,18 +621,19 @@ public class GroundItemIconsOverlay extends Overlay
 
     private String buildItemString(
         TileItem item,
-        ItemComposition composition)
+        ItemComposition composition,
+        int quantity)
     {
         final StringBuilder builder =
             new StringBuilder(
                 composition.getName());
 
-        if (item.getQuantity() > 1)
+        if (quantity > 1)
         {
             builder.append(" (")
                 .append(
                     QuantityFormatter.quantityToStackSize(
-                        item.getQuantity()))
+                        quantity))
                 .append(')');
         }
 
