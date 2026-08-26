@@ -3,6 +3,7 @@ package com.meowcape.grounditemicons;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Range;
 
 @ConfigGroup(GroundItemIconsConfig.GROUP)
 public interface GroundItemIconsConfig extends Config
@@ -26,8 +27,27 @@ public interface GroundItemIconsConfig extends Config
         description = "Size of ground item icons in pixels.",
         position = 1
     )
+    @Range(
+        min = 1,
+        max = 32
+    )
     default int iconSize()
     {
         return 16;
+    }
+
+    @ConfigItem(
+        keyName = "iconPosition",
+        name = "Icon position",
+        description = "Horizontal distance between the item icon and Ground Items text.",
+        position = 2
+    )
+    @Range(
+        min = 0,
+        max = 15
+    )
+    default int iconPosition()
+    {
+        return 6;
     }
 }

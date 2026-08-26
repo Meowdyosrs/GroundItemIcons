@@ -39,7 +39,6 @@ public class GroundItemIconsOverlay extends Overlay
     private static final int MAX_DISTANCE = 2500;
     private static final int OFFSET_Z = 20;
     private static final int STRING_GAP = 15;
-    private static final int ICON_GAP = 6;
 
     private final Client client;
     private final ItemManager itemManager;
@@ -120,7 +119,12 @@ public class GroundItemIconsOverlay extends Overlay
             return null;
         }
 
-        final int iconSize = Math.max(1, Math.min(config.iconSize(), 64));
+        final int iconSize =
+            Math.max(1, Math.min(config.iconSize(), 64));
+
+        final int iconGap =
+            Math.max(0, Math.min(config.iconPosition(), 15));
+
         final Map<WorldPoint, Integer> offsetMap = new HashMap<>();
 
         for (int plane = 0; plane < tiles.length; plane++)
@@ -145,12 +149,14 @@ public class GroundItemIconsOverlay extends Overlay
                 {
                     final Tile tile = row[y];
 
-                    if (tile == null || tile.getGroundItems() == null)
+                    if (tile == null
+                        || tile.getGroundItems() == null)
                     {
                         continue;
                     }
 
-                    final WorldPoint worldPoint = tile.getWorldLocation();
+                    final WorldPoint worldPoint =
+                        tile.getWorldLocation();
 
                     if (worldPoint == null)
                     {
@@ -158,10 +164,13 @@ public class GroundItemIconsOverlay extends Overlay
                     }
 
                     final LocalPoint groundPoint =
-                        LocalPoint.fromWorld(worldView, worldPoint);
+                        LocalPoint.fromWorld(
+                            worldView,
+                            worldPoint);
 
                     if (groundPoint == null
-                        || player.getLocalLocation().distanceTo(groundPoint) > MAX_DISTANCE)
+                        || player.getLocalLocation()
+                            .distanceTo(groundPoint) > MAX_DISTANCE)
                     {
                         continue;
                     }
@@ -174,7 +183,8 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final ItemComposition itemComposition =
-                            itemManager.getItemComposition(item.getId());
+                            itemManager.getItemComposition(
+                                item.getId());
 
                         if (itemComposition == null)
                         {
@@ -182,11 +192,15 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final String itemString =
-                            buildItemString(item, itemComposition);
+                            buildItemString(
+                                item,
+                                itemComposition);
 
-                        final int offset = offsetMap.compute(
-                            worldPoint,
-                            (k, v) -> v == null ? 0 : v + 1);
+                        final int offset =
+                            offsetMap.compute(
+                                worldPoint,
+                                (k, v) ->
+                                    v == null ? 0 : v + 1);
 
                         final net.runelite.api.Point textPoint =
                             Perspective.getCanvasTextLocation(
@@ -195,7 +209,8 @@ public class GroundItemIconsOverlay extends Overlay
                                 groundPoint,
                                 itemString,
                                 tile.getItemLayer() != null
-                                    ? tile.getItemLayer().getHeight() + OFFSET_Z
+                                    ? tile.getItemLayer().getHeight()
+                                        + OFFSET_Z
                                     : OFFSET_Z);
 
                         if (textPoint == null)
@@ -216,15 +231,22 @@ public class GroundItemIconsOverlay extends Overlay
                             continue;
                         }
 
-                        final int textX = textPoint.getX();
+                        final int textX =
+                            textPoint.getX();
+
                         final int textY =
-                            textPoint.getY() - STRING_GAP * offset;
+                            textPoint.getY()
+                                - STRING_GAP * offset;
 
                         final int iconX =
-                            textX - iconSize - ICON_GAP;
+                            textX
+                                - iconSize
+                                - iconGap;
 
                         final int iconY =
-                            textY - iconSize + 2;
+                            textY
+                                - iconSize
+                                + 2;
 
                         graphics.drawImage(
                             image,
@@ -276,12 +298,17 @@ public class GroundItemIconsOverlay extends Overlay
             return false;
         }
 
-        final String name = composition.getName();
-        final int quantity = item.getQuantity();
+        final String name =
+            composition.getName();
+
+        final int quantity =
+            item.getQuantity();
 
         final int match =
             listMatch(
-                getString("highlightedItems", ""),
+                getString(
+                    "highlightedItems",
+                    ""),
                 name,
                 quantity);
 
@@ -293,8 +320,11 @@ public class GroundItemIconsOverlay extends Overlay
                 name,
                 quantity);
 
-        final boolean highlightedByList = match != 0;
-        final boolean hiddenByList = hiddenMatch != 0;
+        final boolean highlightedByList =
+            match != 0;
+
+        final boolean hiddenByList =
+            hiddenMatch != 0;
 
         if (highlightedByList)
         {
@@ -314,9 +344,11 @@ public class GroundItemIconsOverlay extends Overlay
         final int gePrice =
             realItemId == ItemID.COINS
                 ? 1
-                : itemManager.getItemPrice(realItemId);
+                : itemManager.getItemPrice(
+                    realItemId);
 
-        final int haPrice = composition.getHaPrice();
+        final int haPrice =
+            composition.getHaPrice();
 
         final boolean customColor =
             configManager.getConfiguration(
@@ -325,27 +357,36 @@ public class GroundItemIconsOverlay extends Overlay
                 Color.class) != null;
 
         final int value =
-            getValueByMode(gePrice, haPrice);
+            getValueByMode(
+                gePrice,
+                haPrice);
 
         final boolean implicitlyHighlighted =
-            customColor || isPriceHighlighted(value);
+            customColor
+                || isPriceHighlighted(value);
 
-        if (getBoolean("showHighlightedOnly", false)
+        if (getBoolean(
+                "showHighlightedOnly",
+                false)
             && !implicitlyHighlighted)
         {
             return false;
         }
 
         final boolean dontHideUntradeables =
-            getBoolean("dontHideUntradeables", true);
+            getBoolean(
+                "dontHideUntradeables",
+                true);
 
         final boolean canBeHidden =
             gePrice > 0
-            || composition.isTradeable()
-            || !dontHideUntradeables;
+                || composition.isTradeable()
+                || !dontHideUntradeables;
 
         final int hideUnderValue =
-            getInt("hideUnderValue", 0);
+            getInt(
+                "hideUnderValue",
+                0);
 
         final boolean underGe =
             gePrice < hideUnderValue;
@@ -354,7 +395,9 @@ public class GroundItemIconsOverlay extends Overlay
             haPrice < hideUnderValue;
 
         final boolean implicitlyHidden =
-            canBeHidden && underGe && underHa;
+            canBeHidden
+                && underGe
+                && underHa;
 
         return !implicitlyHidden;
     }
@@ -362,13 +405,16 @@ public class GroundItemIconsOverlay extends Overlay
     private boolean ownershipMatches(TileItem item)
     {
         final String mode =
-            getString("ownershipFilterMode", "ALL");
+            getString(
+                "ownershipFilterMode",
+                "ALL");
 
         final int ownership =
             item.getOwnership();
 
         final int accountType =
-            client.getVarbitValue(VarbitID.IRONMAN);
+            client.getVarbitValue(
+                VarbitID.IRONMAN);
 
         if ("DROPS".equalsIgnoreCase(mode))
         {
@@ -411,9 +457,12 @@ public class GroundItemIconsOverlay extends Overlay
         int defaultValue)
     {
         final int threshold =
-            getInt(key, defaultValue);
+            getInt(
+                key,
+                defaultValue);
 
-        return threshold > 0 && value > threshold;
+        return threshold > 0
+            && value > threshold;
     }
 
     private int getValueByMode(
@@ -435,7 +484,9 @@ public class GroundItemIconsOverlay extends Overlay
             return haPrice;
         }
 
-        return Math.max(gePrice, haPrice);
+        return Math.max(
+            gePrice,
+            haPrice);
     }
 
     private String buildItemString(
@@ -443,7 +494,8 @@ public class GroundItemIconsOverlay extends Overlay
         ItemComposition composition)
     {
         final StringBuilder builder =
-            new StringBuilder(composition.getName());
+            new StringBuilder(
+                composition.getName());
 
         if (item.getQuantity() > 1)
         {
@@ -462,7 +514,8 @@ public class GroundItemIconsOverlay extends Overlay
                     : item.getId();
 
             final int gePrice =
-                itemManager.getItemPrice(realItemId);
+                itemManager.getItemPrice(
+                    realItemId);
 
             final int haPrice =
                 composition.getHaPrice();
@@ -472,7 +525,8 @@ public class GroundItemIconsOverlay extends Overlay
                     "priceDisplayMode",
                     "BOTH");
 
-            if ("BOTH".equalsIgnoreCase(displayMode))
+            if ("BOTH".equalsIgnoreCase(
+                    displayMode))
             {
                 if (gePrice > 0)
                 {
@@ -492,10 +546,12 @@ public class GroundItemIconsOverlay extends Overlay
                         .append(" gp)");
                 }
             }
-            else if (!"OFF".equalsIgnoreCase(displayMode))
+            else if (!"OFF".equalsIgnoreCase(
+                displayMode))
             {
                 final int price =
-                    "GE".equalsIgnoreCase(displayMode)
+                    "GE".equalsIgnoreCase(
+                        displayMode)
                         ? gePrice
                         : haPrice;
 
@@ -528,8 +584,10 @@ public class GroundItemIconsOverlay extends Overlay
 
             if (rule != null
                 && !rule.wildcard
-                && rule.name.equalsIgnoreCase(itemName)
-                && rule.quantityMatches(quantity))
+                && rule.name.equalsIgnoreCase(
+                    itemName)
+                && rule.quantityMatches(
+                    quantity))
             {
                 return 2;
             }
@@ -545,7 +603,8 @@ public class GroundItemIconsOverlay extends Overlay
                 && WildcardMatcher.matches(
                     rule.name,
                     itemName)
-                && rule.quantityMatches(quantity))
+                && rule.quantityMatches(
+                    quantity))
             {
                 return 1;
             }
@@ -618,7 +677,8 @@ public class GroundItemIconsOverlay extends Overlay
             this.wildcard = wildcard;
         }
 
-        private static ItemRule parse(String entry)
+        private static ItemRule parse(
+            String entry)
         {
             if (entry == null
                 || entry.trim().isEmpty())
@@ -626,33 +686,42 @@ public class GroundItemIconsOverlay extends Overlay
                 return null;
             }
 
-            String value = entry.trim();
+            String value =
+                entry.trim();
 
             int quantity = 0;
             boolean lessThan = false;
-            boolean wildcard = value.contains("*");
+            boolean wildcard =
+                value.contains("*");
 
-            for (int i = value.length() - 1;
+            for (int i =
+                value.length() - 1;
                 i >= 0;
                 i--)
             {
-                char c = value.charAt(i);
+                char c =
+                    value.charAt(i);
 
-                if ((c >= '0' && c <= '9')
+                if ((c >= '0'
+                    && c <= '9')
                     || Character.isWhitespace(c))
                 {
                     continue;
                 }
 
-                if (c == '<' || c == '>')
+                if (c == '<'
+                    || c == '>')
                 {
-                    if (i + 1 < value.length())
+                    if (i + 1 <
+                        value.length())
                     {
                         try
                         {
                             quantity =
                                 Integer.parseInt(
-                                    value.substring(i + 1).trim());
+                                    value.substring(
+                                        i + 1)
+                                        .trim());
                         }
                         catch (NumberFormatException e)
                         {
@@ -660,8 +729,13 @@ public class GroundItemIconsOverlay extends Overlay
                             lessThan = false;
                         }
 
-                        lessThan = c == '<';
-                        value = value.substring(0, i);
+                        lessThan =
+                            c == '<';
+
+                        value =
+                            value.substring(
+                                0,
+                                i);
                     }
                 }
 
@@ -675,7 +749,8 @@ public class GroundItemIconsOverlay extends Overlay
                 wildcard);
         }
 
-        private boolean quantityMatches(int itemCount)
+        private boolean quantityMatches(
+            int itemCount)
         {
             return lessThan
                 ? itemCount < quantity
