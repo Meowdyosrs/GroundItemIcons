@@ -4,7 +4,9 @@ import com.google.inject.Provides;
 import javax.inject.Inject;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.grounditems.GroundItemsPlugin;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 @PluginDescriptor(
@@ -13,6 +15,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
     tags = {"ground", "items", "icons", "loot"},
     enabledByDefault = true
 )
+@PluginDependency(GroundItemsPlugin.class)
 public class GroundItemIconsPlugin extends Plugin
 {
     @Inject
