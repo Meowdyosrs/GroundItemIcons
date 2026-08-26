@@ -4,23 +4,27 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.util.ArrayList;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.inject.Inject;
+
 import net.runelite.api.Client;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.Perspective;
-import net.runelite.api.WorldView;
 import net.runelite.api.Scene;
 import net.runelite.api.Tile;
 import net.runelite.api.TileItem;
+import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginManager;
+import net.runelite.client.plugins.grounditems.GroundItemsPlugin;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -41,18 +45,35 @@ public class GroundItemIconsOverlay extends Overlay
     private final ItemManager itemManager;
     private final GroundItemIconsConfig config;
     private final net.runelite.client.config.ConfigManager configManager;
+    private final PluginManager pluginManager;
+    private final Method isHideAllMethod;
 
     @Inject
     private GroundItemIconsOverlay(
         Client client,
         ItemManager itemManager,
         GroundItemIconsConfig config,
-        net.runelite.client.config.ConfigManager configManager)
+        net.runelite.client.config.ConfigManager configManager,
+        PluginManager pluginManager)
     {
         this.client = client;
         this.itemManager = itemManager;
         this.config = config;
         this.configManager = configManager;
+        this.pluginManager = pluginManager;
+
+        try
+        {
+            isHideAllMethod =
+                GroundItemsPlugin.class.getDeclaredMethod("isHideAll");
+            isHideAllMethod.setAccessible(true);
+        }
+        catch (ReflectiveOperationException e)
+        {
+            throw new IllegalStateException(
+                "Unable to access Ground Items hide state",
+                e);
+        }
 
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_SCENE);
@@ -66,7 +87,7 @@ public class GroundItemIconsOverlay extends Overlay
             return null;
         }
 
-        if (!groundItemsOverlayIsVisible())
+        if (isGroundItemsHidden())
         {
             return null;
         }
@@ -136,9 +157,11 @@ public class GroundItemIconsOverlay extends Overlay
                         continue;
                     }
 
-                    final LocalPoint groundPoint = LocalPoint.fromWorld(worldView, worldPoint);
+                    final LocalPoint groundPoint =
+                        LocalPoint.fromWorld(worldView, worldPoint);
 
-                    if (groundPoint == null || player.getLocalLocation().distanceTo(groundPoint) > MAX_DISTANCE)
+                    if (groundPoint == null
+                        || player.getLocalLocation().distanceTo(groundPoint) > MAX_DISTANCE)
                     {
                         continue;
                     }
@@ -150,31 +173,38 @@ public class GroundItemIconsOverlay extends Overlay
                             continue;
                         }
 
-                        final ItemComposition itemComposition = itemManager.getItemComposition(item.getId());
+                        final ItemComposition itemComposition =
+                            itemManager.getItemComposition(item.getId());
 
                         if (itemComposition == null)
                         {
                             continue;
                         }
 
-                        final String itemString = buildItemString(item, itemComposition);
+                        final String itemString =
+                            buildItemString(item, itemComposition);
+
                         final int offset = offsetMap.compute(
                             worldPoint,
                             (k, v) -> v == null ? 0 : v + 1);
 
-                        final net.runelite.api.Point textPoint = Perspective.getCanvasTextLocation(
-                            client,
-                            graphics,
-                            groundPoint,
-                            itemString,
-                            tile.getItemLayer() != null ? tile.getItemLayer().getHeight() + OFFSET_Z : OFFSET_Z);
+                        final net.runelite.api.Point textPoint =
+                            Perspective.getCanvasTextLocation(
+                                client,
+                                graphics,
+                                groundPoint,
+                                itemString,
+                                tile.getItemLayer() != null
+                                    ? tile.getItemLayer().getHeight() + OFFSET_Z
+                                    : OFFSET_Z);
 
                         if (textPoint == null)
                         {
                             continue;
                         }
 
-                        final BufferedImage image = itemManager.getImage(item.getId());
+                        final BufferedImage image =
+                            itemManager.getImage(item.getId());
 
                         if (image == null)
                         {
@@ -182,10 +212,14 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final int textX = textPoint.getX();
-                        final int textY = textPoint.getY() - STRING_GAP * offset;
+                        final int textY =
+                            textPoint.getY() - STRING_GAP * offset;
 
-                        final int iconX = textX - iconSize - ICON_GAP;
-                        final int iconY = textY - iconSize + 2;
+                        final int iconX =
+                            textX - iconSize - ICON_GAP;
+
+                        final int iconY =
+                            textY - iconSize + 2;
 
                         graphics.drawImage(
                             image,
@@ -202,10 +236,24 @@ public class GroundItemIconsOverlay extends Overlay
         return null;
     }
 
-    private boolean groundItemsOverlayIsVisible()
+    private boolean isGroundItemsHidden()
     {
-        final String mode = getString("itemHighlightMode", "BOTH");
-        return !"NONE".equalsIgnoreCase(mode) && !"MENU".equalsIgnoreCase(mode);
+        for (Plugin plugin : pluginManager.getPlugins())
+        {
+            if (plugin instanceof GroundItemsPlugin)
+            {
+                try
+                {
+                    return (Boolean) isHideAllMethod.invoke(plugin);
+                }
+                catch (ReflectiveOperationException e)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return false;
     }
 
     private boolean shouldDisplayItem(TileItem item)
@@ -215,7 +263,8 @@ public class GroundItemIconsOverlay extends Overlay
             return false;
         }
 
-        final ItemComposition composition = itemManager.getItemComposition(item.getId());
+        final ItemComposition composition =
+            itemManager.getItemComposition(item.getId());
 
         if (composition == null)
         {
@@ -225,11 +274,19 @@ public class GroundItemIconsOverlay extends Overlay
         final String name = composition.getName();
         final int quantity = item.getQuantity();
 
-        final int match = listMatch(getString("highlightedItems", ""), name, quantity);
+        final int match =
+            listMatch(
+                getString("highlightedItems", ""),
+                name,
+                quantity);
 
-        final int hiddenMatch = listMatch(getString(
-            "hiddenItems",
-            "Vial, Ashes, Coins, Bones, Bucket, Jug, Seaweed"), name, quantity);
+        final int hiddenMatch =
+            listMatch(
+                getString(
+                    "hiddenItems",
+                    "Vial, Ashes, Coins, Bones, Bucket, Jug, Seaweed"),
+                name,
+                quantity);
 
         final boolean highlightedByList = match != 0;
         final boolean hiddenByList = hiddenMatch != 0;
@@ -244,40 +301,52 @@ public class GroundItemIconsOverlay extends Overlay
             return false;
         }
 
-        final int realItemId = composition.getNote() != -1
-            ? composition.getLinkedNoteId()
-            : item.getId();
+        final int realItemId =
+            composition.getNote() != -1
+                ? composition.getLinkedNoteId()
+                : item.getId();
 
-        final int gePrice = realItemId == ItemID.COINS
-            ? 1
-            : itemManager.getItemPrice(realItemId);
+        final int gePrice =
+            realItemId == ItemID.COINS
+                ? 1
+                : itemManager.getItemPrice(realItemId);
 
         final int haPrice = composition.getHaPrice();
 
-        final boolean customColor = configManager.getConfiguration(
-            GROUND_ITEMS_GROUP,
-            ICON_COLOR_PREFIX + item.getId(),
-            Color.class) != null;
+        final boolean customColor =
+            configManager.getConfiguration(
+                GROUND_ITEMS_GROUP,
+                ICON_COLOR_PREFIX + item.getId(),
+                Color.class) != null;
 
-        final int value = getValueByMode(gePrice, haPrice);
+        final int value =
+            getValueByMode(gePrice, haPrice);
 
-        final boolean implicitlyHighlighted = customColor || isPriceHighlighted(value);
+        final boolean implicitlyHighlighted =
+            customColor || isPriceHighlighted(value);
 
-        if (getBoolean("showHighlightedOnly", false) && !implicitlyHighlighted)
+        if (getBoolean("showHighlightedOnly", false)
+            && !implicitlyHighlighted)
         {
             return false;
         }
 
-        final boolean dontHideUntradeables = getBoolean("dontHideUntradeables", true);
+        final boolean dontHideUntradeables =
+            getBoolean("dontHideUntradeables", true);
+
         final boolean canBeHidden =
             gePrice > 0
-                || composition.isTradeable()
-                || !dontHideUntradeables;
+            || composition.isTradeable()
+            || !dontHideUntradeables;
 
-        final int hideUnderValue = getInt("hideUnderValue", 0);
+        final int hideUnderValue =
+            getInt("hideUnderValue", 0);
 
-        final boolean underGe = gePrice < hideUnderValue;
-        final boolean underHa = haPrice < hideUnderValue;
+        final boolean underGe =
+            gePrice < hideUnderValue;
+
+        final boolean underHa =
+            haPrice < hideUnderValue;
 
         final boolean implicitlyHidden =
             canBeHidden && underGe && underHa;
@@ -287,9 +356,14 @@ public class GroundItemIconsOverlay extends Overlay
 
     private boolean ownershipMatches(TileItem item)
     {
-        final String mode = getString("ownershipFilterMode", "ALL");
-        final int ownership = item.getOwnership();
-        final int accountType = client.getVarbitValue(VarbitID.IRONMAN);
+        final String mode =
+            getString("ownershipFilterMode", "ALL");
+
+        final int ownership =
+            item.getOwnership();
+
+        final int accountType =
+            client.getVarbitValue(VarbitID.IRONMAN);
 
         if ("DROPS".equalsIgnoreCase(mode))
         {
@@ -299,7 +373,8 @@ public class GroundItemIconsOverlay extends Overlay
 
         if ("TAKEABLE".equalsIgnoreCase(mode))
         {
-            return ownership != TileItem.OWNERSHIP_OTHER || accountType == 0;
+            return ownership != TileItem.OWNERSHIP_OTHER
+                || accountType == 0;
         }
 
         return true;
@@ -307,21 +382,43 @@ public class GroundItemIconsOverlay extends Overlay
 
     private boolean isPriceHighlighted(int value)
     {
-        return isAboveConfiguredThreshold(value, "lowValuePrice", 20000)
-            || isAboveConfiguredThreshold(value, "mediumValuePrice", 100000)
-            || isAboveConfiguredThreshold(value, "highValuePrice", 1000000)
-            || isAboveConfiguredThreshold(value, "insaneValuePrice", 10000000);
+        return isAboveConfiguredThreshold(
+                value,
+                "lowValuePrice",
+                20000)
+            || isAboveConfiguredThreshold(
+                value,
+                "mediumValuePrice",
+                100000)
+            || isAboveConfiguredThreshold(
+                value,
+                "highValuePrice",
+                1000000)
+            || isAboveConfiguredThreshold(
+                value,
+                "insaneValuePrice",
+                10000000);
     }
 
-    private boolean isAboveConfiguredThreshold(int value, String key, int defaultValue)
+    private boolean isAboveConfiguredThreshold(
+        int value,
+        String key,
+        int defaultValue)
     {
-        final int threshold = getInt(key, defaultValue);
+        final int threshold =
+            getInt(key, defaultValue);
+
         return threshold > 0 && value > threshold;
     }
 
-    private int getValueByMode(int gePrice, int haPrice)
+    private int getValueByMode(
+        int gePrice,
+        int haPrice)
     {
-        final String mode = getString("highlightValueCalculation", "HIGHEST");
+        final String mode =
+            getString(
+                "highlightValueCalculation",
+                "HIGHEST");
 
         if ("GE".equalsIgnoreCase(mode))
         {
@@ -336,51 +433,73 @@ public class GroundItemIconsOverlay extends Overlay
         return Math.max(gePrice, haPrice);
     }
 
-    private String buildItemString(TileItem item, ItemComposition composition)
+    private String buildItemString(
+        TileItem item,
+        ItemComposition composition)
     {
-        final StringBuilder builder = new StringBuilder(composition.getName());
+        final StringBuilder builder =
+            new StringBuilder(composition.getName());
 
         if (item.getQuantity() > 1)
         {
             builder.append(" (")
-                .append(QuantityFormatter.quantityToStackSize(item.getQuantity()))
+                .append(
+                    QuantityFormatter.quantityToStackSize(
+                        item.getQuantity()))
                 .append(')');
         }
 
         if (item.getId() != ItemID.COINS)
         {
-            final int realItemId = composition.getNote() != -1
-                ? composition.getLinkedNoteId()
-                : item.getId();
+            final int realItemId =
+                composition.getNote() != -1
+                    ? composition.getLinkedNoteId()
+                    : item.getId();
 
-            final int gePrice = itemManager.getItemPrice(realItemId);
-            final int haPrice = composition.getHaPrice();
-            final String displayMode = getString("priceDisplayMode", "BOTH");
+            final int gePrice =
+                itemManager.getItemPrice(realItemId);
+
+            final int haPrice =
+                composition.getHaPrice();
+
+            final String displayMode =
+                getString(
+                    "priceDisplayMode",
+                    "BOTH");
 
             if ("BOTH".equalsIgnoreCase(displayMode))
             {
                 if (gePrice > 0)
                 {
                     builder.append(" (GE: ")
-                        .append(QuantityFormatter.quantityToStackSize(gePrice))
+                        .append(
+                            QuantityFormatter.quantityToStackSize(
+                                gePrice))
                         .append(" gp)");
                 }
 
                 if (haPrice > 0)
                 {
                     builder.append(" (HA: ")
-                        .append(QuantityFormatter.quantityToStackSize(haPrice))
+                        .append(
+                            QuantityFormatter.quantityToStackSize(
+                                haPrice))
                         .append(" gp)");
                 }
             }
             else if (!"OFF".equalsIgnoreCase(displayMode))
             {
-                final int price = "GE".equalsIgnoreCase(displayMode) ? gePrice : haPrice;
+                final int price =
+                    "GE".equalsIgnoreCase(displayMode)
+                        ? gePrice
+                        : haPrice;
 
                 if (price > 0)
                 {
                     builder.append(" (")
-                        .append(QuantityFormatter.quantityToStackSize(price))
+                        .append(
+                            QuantityFormatter.quantityToStackSize(
+                                price))
                         .append(" gp)");
                 }
             }
@@ -389,15 +508,21 @@ public class GroundItemIconsOverlay extends Overlay
         return builder.toString();
     }
 
-    private int listMatch(String csv, String itemName, int quantity)
+    private int listMatch(
+        String csv,
+        String itemName,
+        int quantity)
     {
-        final List<String> entries = Text.fromCSV(csv);
+        final List<String> entries =
+            Text.fromCSV(csv);
 
         for (String entry : entries)
         {
-            final ItemRule rule = ItemRule.parse(entry);
+            final ItemRule rule =
+                ItemRule.parse(entry);
 
-            if (rule != null && !rule.wildcard
+            if (rule != null
+                && !rule.wildcard
                 && rule.name.equalsIgnoreCase(itemName)
                 && rule.quantityMatches(quantity))
             {
@@ -407,10 +532,14 @@ public class GroundItemIconsOverlay extends Overlay
 
         for (String entry : entries)
         {
-            final ItemRule rule = ItemRule.parse(entry);
+            final ItemRule rule =
+                ItemRule.parse(entry);
 
-            if (rule != null && rule.wildcard
-                && WildcardMatcher.matches(rule.name, itemName)
+            if (rule != null
+                && rule.wildcard
+                && WildcardMatcher.matches(
+                    rule.name,
+                    itemName)
                 && rule.quantityMatches(quantity))
             {
                 return 1;
@@ -420,22 +549,49 @@ public class GroundItemIconsOverlay extends Overlay
         return 0;
     }
 
-    private String getString(String key, String defaultValue)
+    private String getString(
+        String key,
+        String defaultValue)
     {
-        final String value = configManager.getConfiguration(GROUND_ITEMS_GROUP, key, String.class);
-        return value == null ? defaultValue : value;
+        final String value =
+            configManager.getConfiguration(
+                GROUND_ITEMS_GROUP,
+                key,
+                String.class);
+
+        return value == null
+            ? defaultValue
+            : value;
     }
 
-    private boolean getBoolean(String key, boolean defaultValue)
+    private boolean getBoolean(
+        String key,
+        boolean defaultValue)
     {
-        final Boolean value = configManager.getConfiguration(GROUND_ITEMS_GROUP, key, Boolean.class);
-        return value == null ? defaultValue : value;
+        final Boolean value =
+            configManager.getConfiguration(
+                GROUND_ITEMS_GROUP,
+                key,
+                Boolean.class);
+
+        return value == null
+            ? defaultValue
+            : value;
     }
 
-    private int getInt(String key, int defaultValue)
+    private int getInt(
+        String key,
+        int defaultValue)
     {
-        final Integer value = configManager.getConfiguration(GROUND_ITEMS_GROUP, key, Integer.class);
-        return value == null ? defaultValue : value;
+        final Integer value =
+            configManager.getConfiguration(
+                GROUND_ITEMS_GROUP,
+                key,
+                Integer.class);
+
+        return value == null
+            ? defaultValue
+            : value;
     }
 
     private static final class ItemRule
@@ -445,7 +601,11 @@ public class GroundItemIconsOverlay extends Overlay
         private final boolean lessThan;
         private final boolean wildcard;
 
-        private ItemRule(String name, int quantity, boolean lessThan, boolean wildcard)
+        private ItemRule(
+            String name,
+            int quantity,
+            boolean lessThan,
+            boolean wildcard)
         {
             this.name = name;
             this.quantity = quantity;
@@ -455,21 +615,26 @@ public class GroundItemIconsOverlay extends Overlay
 
         private static ItemRule parse(String entry)
         {
-            if (entry == null || entry.trim().isEmpty())
+            if (entry == null
+                || entry.trim().isEmpty())
             {
                 return null;
             }
 
             String value = entry.trim();
+
             int quantity = 0;
             boolean lessThan = false;
             boolean wildcard = value.contains("*");
 
-            for (int i = value.length() - 1; i >= 0; i--)
+            for (int i = value.length() - 1;
+                i >= 0;
+                i--)
             {
                 char c = value.charAt(i);
 
-                if ((c >= '0' && c <= '9') || Character.isWhitespace(c))
+                if ((c >= '0' && c <= '9')
+                    || Character.isWhitespace(c))
                 {
                     continue;
                 }
@@ -480,7 +645,9 @@ public class GroundItemIconsOverlay extends Overlay
                     {
                         try
                         {
-                            quantity = Integer.parseInt(value.substring(i + 1).trim());
+                            quantity =
+                                Integer.parseInt(
+                                    value.substring(i + 1).trim());
                         }
                         catch (NumberFormatException e)
                         {
@@ -496,12 +663,18 @@ public class GroundItemIconsOverlay extends Overlay
                 break;
             }
 
-            return new ItemRule(value.trim(), quantity, lessThan, wildcard);
+            return new ItemRule(
+                value.trim(),
+                quantity,
+                lessThan,
+                wildcard);
         }
 
         private boolean quantityMatches(int itemCount)
         {
-            return lessThan ? itemCount < quantity : itemCount > quantity;
+            return lessThan
+                ? itemCount < quantity
+                : itemCount > quantity;
         }
     }
 }
