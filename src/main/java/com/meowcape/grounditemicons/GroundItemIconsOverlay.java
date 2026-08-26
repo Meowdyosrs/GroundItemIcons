@@ -4,7 +4,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,16 +20,14 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.game.ItemManager;
-import net.runelite.client.plugins.Plugin;
-import net.runelite.client.plugins.PluginManager;
-import net.runelite.client.plugins.grounditems.GroundItemsPlugin;
-import net.runelite.client.ui.overlay.Overlay;
-import net.runelite.client.ui.overlay.OverlayLayer;
-import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.util.QuantityFormatter;
 import net.runelite.client.util.Text;
 import net.runelite.client.util.WildcardMatcher;
+import net.runelite.client.ui.overlay.Overlay;
+import net.runelite.client.ui.overlay.OverlayLayer;
+import net.runelite.client.ui.overlay.OverlayPosition;
 
 public class GroundItemIconsOverlay extends Overlay
 {
@@ -43,36 +40,22 @@ public class GroundItemIconsOverlay extends Overlay
     private final Client client;
     private final ItemManager itemManager;
     private final GroundItemIconsConfig config;
-    private final net.runelite.client.config.ConfigManager configManager;
-    private final PluginManager pluginManager;
-    private final Method isHideAllMethod;
+    private final ConfigManager configManager;
+    private final GroundItemIconsState state;
 
     @Inject
     private GroundItemIconsOverlay(
         Client client,
         ItemManager itemManager,
         GroundItemIconsConfig config,
-        net.runelite.client.config.ConfigManager configManager,
-        PluginManager pluginManager)
+        ConfigManager configManager,
+        GroundItemIconsState state)
     {
         this.client = client;
         this.itemManager = itemManager;
         this.config = config;
         this.configManager = configManager;
-        this.pluginManager = pluginManager;
-
-        try
-        {
-            isHideAllMethod =
-                GroundItemsPlugin.class.getDeclaredMethod("isHideAll");
-            isHideAllMethod.setAccessible(true);
-        }
-        catch (ReflectiveOperationException e)
-        {
-            throw new IllegalStateException(
-                "Unable to access Ground Items hide state",
-                e);
-        }
+        this.state = state;
 
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_SCENE);
@@ -86,33 +69,37 @@ public class GroundItemIconsOverlay extends Overlay
             return null;
         }
 
-        if (isGroundItemsHidden())
+        if (state.isHidden())
         {
             return null;
         }
 
-        final net.runelite.api.Player player = client.getLocalPlayer();
+        final net.runelite.api.Player player =
+            client.getLocalPlayer();
 
         if (player == null)
         {
             return null;
         }
 
-        final WorldView worldView = client.getTopLevelWorldView();
+        final WorldView worldView =
+            client.getTopLevelWorldView();
 
         if (worldView == null)
         {
             return null;
         }
 
-        final Scene scene = worldView.getScene();
+        final Scene scene =
+            worldView.getScene();
 
         if (scene == null)
         {
             return null;
         }
 
-        final Tile[][][] tiles = scene.getTiles();
+        final Tile[][][] tiles =
+            scene.getTiles();
 
         if (tiles == null)
         {
@@ -123,9 +110,10 @@ public class GroundItemIconsOverlay extends Overlay
             Math.max(1, Math.min(config.iconSize(), 64));
 
         final int iconGap =
-            Math.max(0, Math.min(config.iconPosition(), 15));
+            config.iconPosition();
 
-        final Map<WorldPoint, Integer> offsetMap = new HashMap<>();
+        final Map<WorldPoint, Integer> offsetMap =
+            new HashMap<>();
 
         for (int plane = 0; plane < tiles.length; plane++)
         {
@@ -170,7 +158,8 @@ public class GroundItemIconsOverlay extends Overlay
 
                     if (groundPoint == null
                         || player.getLocalLocation()
-                            .distanceTo(groundPoint) > MAX_DISTANCE)
+                            .distanceTo(groundPoint)
+                            > MAX_DISTANCE)
                     {
                         continue;
                     }
@@ -224,7 +213,8 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final BufferedImage image =
-                            itemManager.getImage(item.getId());
+                            itemManager.getImage(
+                                item.getId());
 
                         if (image == null)
                         {
@@ -263,26 +253,6 @@ public class GroundItemIconsOverlay extends Overlay
         return null;
     }
 
-    private boolean isGroundItemsHidden()
-    {
-        for (Plugin plugin : pluginManager.getPlugins())
-        {
-            if (plugin instanceof GroundItemsPlugin)
-            {
-                try
-                {
-                    return (Boolean) isHideAllMethod.invoke(plugin);
-                }
-                catch (ReflectiveOperationException e)
-                {
-                    return false;
-                }
-            }
-        }
-
-        return false;
-    }
-
     private boolean shouldDisplayItem(TileItem item)
     {
         if (!ownershipMatches(item))
@@ -291,7 +261,8 @@ public class GroundItemIconsOverlay extends Overlay
         }
 
         final ItemComposition composition =
-            itemManager.getItemComposition(item.getId());
+            itemManager.getItemComposition(
+                item.getId());
 
         if (composition == null)
         {
@@ -320,18 +291,12 @@ public class GroundItemIconsOverlay extends Overlay
                 name,
                 quantity);
 
-        final boolean highlightedByList =
-            match != 0;
-
-        final boolean hiddenByList =
-            hiddenMatch != 0;
-
-        if (highlightedByList)
+        if (match != 0)
         {
             return true;
         }
 
-        if (hiddenByList)
+        if (hiddenMatch != 0)
         {
             return false;
         }
