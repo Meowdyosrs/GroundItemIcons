@@ -39,7 +39,7 @@ public class GroundItemIconsOverlay extends Overlay
     private static final int MAX_DISTANCE = 2500;
     private static final int OFFSET_Z = 20;
     private static final int STRING_GAP = 15;
-    private static final int ICON_GAP = 2;
+    private static final int ICON_GAP = 6;
 
     private final Client client;
     private final ItemManager itemManager;
@@ -199,6 +199,11 @@ public class GroundItemIconsOverlay extends Overlay
                                     : OFFSET_Z);
 
                         if (textPoint == null)
+                        {
+                            continue;
+                        }
+
+                        if (offset > 0)
                         {
                             continue;
                         }
