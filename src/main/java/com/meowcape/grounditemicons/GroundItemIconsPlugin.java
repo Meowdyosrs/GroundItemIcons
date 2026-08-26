@@ -21,6 +21,12 @@ public class GroundItemIconsPlugin extends Plugin
     @Inject
     private GroundItemIconsOverlay overlay;
 
+    @Inject
+    private GroundItemIconsHotkeyListener hotkeyListener;
+
+    @Inject
+    private GroundItemIconsState state;
+
     @Provides
     GroundItemIconsConfig provideConfig(ConfigManager configManager)
     {
@@ -30,12 +36,15 @@ public class GroundItemIconsPlugin extends Plugin
     @Override
     protected void startUp()
     {
+        state.setHidden(false);
+        hotkeyListener.register();
         overlayManager.add(overlay);
     }
 
     @Override
     protected void shutDown()
     {
+        hotkeyListener.unregister();
         overlayManager.remove(overlay);
     }
 }

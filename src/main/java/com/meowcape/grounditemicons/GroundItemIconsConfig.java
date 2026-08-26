@@ -3,6 +3,7 @@ package com.meowcape.grounditemicons;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
+import net.runelite.client.config.Keybind;
 import net.runelite.client.config.Range;
 
 @ConfigGroup(GroundItemIconsConfig.GROUP)
@@ -43,11 +44,22 @@ public interface GroundItemIconsConfig extends Config
         position = 2
     )
     @Range(
-        min = 0,
+        min = -10,
         max = 15
     )
     default int iconPosition()
     {
         return 6;
+    }
+
+    @ConfigItem(
+        keyName = "hotkey",
+        name = "Hotkey",
+        description = "Hotkey used to hide and show ground item icons. This should be the same hotkey as the one used in Ground Items.",
+        position = 3
+    )
+    default Keybind hotkey()
+    {
+        return Keybind.ALT;
     }
 }
