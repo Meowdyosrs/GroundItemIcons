@@ -1,6 +1,6 @@
 # Ground Item Icons
 
-Standalone RuneLite plugin that works alongside the unmodified Ground Items plugin.
+Standalone RuneLite plugin that works alongside the Ground Items plugin.
 
 ## Features
 - Show/hide icons with its own toggle.
