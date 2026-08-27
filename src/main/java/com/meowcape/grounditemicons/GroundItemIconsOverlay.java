@@ -5,8 +5,10 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.inject.Inject;
 
 import net.runelite.api.Client;
@@ -22,7 +24,6 @@ import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.game.ItemManager;
-import net.runelite.client.plugins.grounditems.GroundItemsPlugin;
 import net.runelite.client.ui.overlay.Overlay;
 import net.runelite.client.ui.overlay.OverlayLayer;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -43,7 +44,6 @@ public class GroundItemIconsOverlay extends Overlay
     private final GroundItemIconsConfig config;
     private final ConfigManager configManager;
     private final GroundItemIconsState state;
-    private final GroundItemsPlugin groundItemsPlugin;
 
     @Inject
     private GroundItemIconsOverlay(
@@ -51,15 +51,13 @@ public class GroundItemIconsOverlay extends Overlay
         ItemManager itemManager,
         GroundItemIconsConfig config,
         ConfigManager configManager,
-        GroundItemIconsState state,
-        GroundItemsPlugin groundItemsPlugin)
+        GroundItemIconsState state)
     {
         this.client = client;
         this.itemManager = itemManager;
         this.config = config;
         this.configManager = configManager;
         this.state = state;
-        this.groundItemsPlugin = groundItemsPlugin;
 
         setPosition(OverlayPosition.DYNAMIC);
         setLayer(OverlayLayer.ABOVE_SCENE);
@@ -115,9 +113,6 @@ public class GroundItemIconsOverlay extends Overlay
 
         final int iconGap =
             config.iconPosition();
-
-        final Map<WorldPoint, Integer> offsetMap =
-            new HashMap<>();
 
         for (int plane = 0; plane < tiles.length; plane++)
         {
@@ -186,17 +181,25 @@ public class GroundItemIconsOverlay extends Overlay
                             Integer::sum);
                     }
 
-                    final Map<Integer, ?> collectedItems =
-                        groundItemsPlugin
-                            .getCollectedGroundItems()
-                            .row(worldPoint);
+                    final Set<Integer> processedItemIds =
+                        new HashSet<>();
 
-                    for (Integer itemId : collectedItems.keySet())
+                    int offset = 0;
+
+                    for (TileItem item : tile.getGroundItems())
                     {
-                        final TileItem item =
+                        final int itemId =
+                            item.getId();
+
+                        if (!processedItemIds.add(itemId))
+                        {
+                            continue;
+                        }
+
+                        final TileItem representative =
                             representativeItems.get(itemId);
 
-                        if (item == null)
+                        if (representative == null)
                         {
                             continue;
                         }
@@ -204,10 +207,10 @@ public class GroundItemIconsOverlay extends Overlay
                         final int quantity =
                             quantities.getOrDefault(
                                 itemId,
-                                item.getQuantity());
+                                representative.getQuantity());
 
                         if (!shouldDisplayItem(
-                            item,
+                            representative,
                             quantity))
                         {
                             continue;
@@ -224,15 +227,9 @@ public class GroundItemIconsOverlay extends Overlay
 
                         final String itemString =
                             buildItemString(
-                                item,
+                                representative,
                                 itemComposition,
                                 quantity);
-
-                        final int offset =
-                            offsetMap.compute(
-                                worldPoint,
-                                (k, v) ->
-                                    v == null ? 0 : v + 1);
 
                         final net.runelite.api.Point textPoint =
                             Perspective.getCanvasTextLocation(
@@ -282,6 +279,8 @@ public class GroundItemIconsOverlay extends Overlay
                             iconSize,
                             iconSize,
                             null);
+
+                        offset++;
                     }
                 }
             }
@@ -349,7 +348,7 @@ public class GroundItemIconsOverlay extends Overlay
                     realItemId);
 
         final int haPrice =
-            composition.getHaPrice() * quantity;
+            composition.getHaPrice();
 
         final boolean customColor =
             configManager.getConfiguration(
@@ -360,7 +359,7 @@ public class GroundItemIconsOverlay extends Overlay
         final int value =
             getValueByMode(
                 gePrice * quantity,
-                haPrice);
+                haPrice * quantity);
 
         final boolean implicitlyHighlighted =
             customColor
@@ -393,7 +392,7 @@ public class GroundItemIconsOverlay extends Overlay
             gePrice * quantity < hideUnderValue;
 
         final boolean underHa =
-            haPrice < hideUnderValue;
+            haPrice * quantity < hideUnderValue;
 
         final boolean implicitlyHidden =
             canBeHidden

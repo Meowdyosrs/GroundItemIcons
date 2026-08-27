@@ -3,19 +3,17 @@ package com.meowcape.grounditemicons;
 import com.google.inject.Provides;
 import javax.inject.Inject;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.input.KeyManager;
 import net.runelite.client.plugins.Plugin;
-import net.runelite.client.plugins.PluginDependency;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.plugins.grounditems.GroundItemsPlugin;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 @PluginDescriptor(
     name = "Ground Item Icons",
-    description = "Displays item icons next to Ground Items text.",
+    description = "Displays item icons next to Ground Items names.",
     tags = {"ground", "items", "icons", "loot"},
     enabledByDefault = true
 )
-@PluginDependency(GroundItemsPlugin.class)
 public class GroundItemIconsPlugin extends Plugin
 {
     @Inject
@@ -30,6 +28,9 @@ public class GroundItemIconsPlugin extends Plugin
     @Inject
     private GroundItemIconsState state;
 
+    @Inject
+    private KeyManager keyManager;
+
     @Provides
     GroundItemIconsConfig provideConfig(ConfigManager configManager)
     {
@@ -40,14 +41,14 @@ public class GroundItemIconsPlugin extends Plugin
     protected void startUp()
     {
         state.setHidden(false);
-        hotkeyListener.register();
+        keyManager.registerKeyListener(hotkeyListener);
         overlayManager.add(overlay);
     }
 
     @Override
     protected void shutDown()
     {
-        hotkeyListener.unregister();
+        keyManager.unregisterKeyListener(hotkeyListener);
         overlayManager.remove(overlay);
     }
 }
