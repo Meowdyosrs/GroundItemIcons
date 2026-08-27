@@ -55,7 +55,7 @@ public interface GroundItemIconsConfig extends Config
     @ConfigItem(
         keyName = "hotkey",
         name = "Hotkey",
-        description = "Hotkey used to hide and show ground item icons. This should be the same hotkey as the one used in Ground Items.",
+        description = "Hotkey used to hide and show ground item icons. This should NOT be the same hotkey as the one used in Ground Items.",
         position = 3
     )
     default Keybind hotkey()

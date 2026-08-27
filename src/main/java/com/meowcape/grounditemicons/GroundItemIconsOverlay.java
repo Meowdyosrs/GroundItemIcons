@@ -5,10 +5,8 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import javax.inject.Inject;
 
 import net.runelite.api.Client;
@@ -109,32 +107,94 @@ public class GroundItemIconsOverlay extends Overlay
         }
 
         final int iconSize =
-            Math.max(1, Math.min(config.iconSize(), 64));
+            Math.max(
+                1,
+                Math.min(
+                    config.iconSize(),
+                    64));
 
         final int iconGap =
             config.iconPosition();
 
-        for (int plane = 0; plane < tiles.length; plane++)
+        /*
+         * Ground Items calculates stack offsets from the global
+         * collected item collection, while maintaining a separate
+         * offset counter for each world location.
+         *
+         * We do the same here so that icon offsets use the same
+         * global collection ordering rather than relying on the
+         * ordering returned by a single tile's item collection.
+         */
+        final Map<WorldPoint, Map<Integer, Integer>> offsetMap =
+            new HashMap<>();
+
+        final Map<WorldPoint, Integer> locationOffsets =
+            new HashMap<>();
+
+        for (GroundItemIconsEntry entry :
+            state.getAllItems())
         {
-            final Tile[][] planeTiles = tiles[plane];
+            final TileItem item =
+                entry.getItem();
+
+            final int quantity =
+                entry.getQuantity();
+
+            if (!shouldDisplayItem(
+                item,
+                quantity))
+            {
+                continue;
+            }
+
+            final WorldPoint worldPoint =
+                entry.getWorldPoint();
+
+            final int offset =
+                locationOffsets.compute(
+                    worldPoint,
+                    (k, v) ->
+                        v == null ? 0 : v + 1);
+
+            offsetMap
+                .computeIfAbsent(
+                    worldPoint,
+                    k -> new HashMap<>())
+                .put(
+                    entry.getItemId(),
+                    offset);
+        }
+
+        for (int plane = 0;
+             plane < tiles.length;
+             plane++)
+        {
+            final Tile[][] planeTiles =
+                tiles[plane];
 
             if (planeTiles == null)
             {
                 continue;
             }
 
-            for (int x = 0; x < planeTiles.length; x++)
+            for (int x = 0;
+                 x < planeTiles.length;
+                 x++)
             {
-                final Tile[] row = planeTiles[x];
+                final Tile[] row =
+                    planeTiles[x];
 
                 if (row == null)
                 {
                     continue;
                 }
 
-                for (int y = 0; y < row.length; y++)
+                for (int y = 0;
+                     y < row.length;
+                     y++)
                 {
-                    final Tile tile = row[y];
+                    final Tile tile =
+                        row[y];
 
                     if (tile == null
                         || tile.getGroundItems() == null)
@@ -157,64 +217,57 @@ public class GroundItemIconsOverlay extends Overlay
 
                     if (groundPoint == null
                         || player.getLocalLocation()
-                            .distanceTo(groundPoint)
+                            .distanceTo(
+                                groundPoint)
                             > MAX_DISTANCE)
                     {
                         continue;
                     }
 
-                    final Map<Integer, TileItem> representativeItems =
-                        new HashMap<>();
+                    final Map<Integer, Integer> itemOffsets =
+                        offsetMap.get(
+                            worldPoint);
 
-                    final Map<Integer, Integer> quantities =
-                        new HashMap<>();
-
-                    for (TileItem tileItem : tile.getGroundItems())
+                    if (itemOffsets == null
+                        || itemOffsets.isEmpty())
                     {
-                        representativeItems.putIfAbsent(
-                            tileItem.getId(),
-                            tileItem);
-
-                        quantities.merge(
-                            tileItem.getId(),
-                            tileItem.getQuantity(),
-                            Integer::sum);
+                        continue;
                     }
 
-                    final Set<Integer> processedItemIds =
-                        new HashSet<>();
+                    final Map<Integer, GroundItemIconsEntry> entries =
+                        new HashMap<>();
 
-                    int offset = 0;
+                    for (GroundItemIconsEntry entry :
+                        state.getItems(worldPoint))
+                    {
+                        entries.put(
+                            entry.getItemId(),
+                            entry);
+                    }
 
-                    for (TileItem item : tile.getGroundItems())
+                    for (Map.Entry<Integer, GroundItemIconsEntry> entry :
+                        entries.entrySet())
                     {
                         final int itemId =
-                            item.getId();
+                            entry.getKey();
 
-                        if (!processedItemIds.add(itemId))
+                        final GroundItemIconsEntry iconEntry =
+                            entry.getValue();
+
+                        final Integer offset =
+                            itemOffsets.get(
+                                itemId);
+
+                        if (offset == null)
                         {
                             continue;
                         }
 
-                        final TileItem representative =
-                            representativeItems.get(itemId);
-
-                        if (representative == null)
-                        {
-                            continue;
-                        }
+                        final TileItem item =
+                            iconEntry.getItem();
 
                         final int quantity =
-                            quantities.getOrDefault(
-                                itemId,
-                                representative.getQuantity());
-
-                        if (!shouldDisplayItem(
-                            representative,
-                            quantity))
-                        {
-                            continue;
-                        }
+                            iconEntry.getQuantity();
 
                         final ItemComposition itemComposition =
                             itemManager.getItemComposition(
@@ -227,7 +280,7 @@ public class GroundItemIconsOverlay extends Overlay
 
                         final String itemString =
                             buildItemString(
-                                representative,
+                                item,
                                 itemComposition,
                                 quantity);
 
@@ -248,7 +301,8 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final BufferedImage image =
-                            itemManager.getImage(itemId);
+                            itemManager.getImage(
+                                itemId);
 
                         if (image == null)
                         {
@@ -279,8 +333,6 @@ public class GroundItemIconsOverlay extends Overlay
                             iconSize,
                             iconSize,
                             null);
-
-                        offset++;
                     }
                 }
             }
@@ -363,7 +415,8 @@ public class GroundItemIconsOverlay extends Overlay
 
         final boolean implicitlyHighlighted =
             customColor
-                || isPriceHighlighted(value);
+                || isPriceHighlighted(
+                    value);
 
         if (getBoolean(
                 "showHighlightedOnly",
@@ -389,10 +442,12 @@ public class GroundItemIconsOverlay extends Overlay
                 0);
 
         final boolean underGe =
-            gePrice * quantity < hideUnderValue;
+            gePrice * quantity
+                < hideUnderValue;
 
         final boolean underHa =
-            haPrice * quantity < hideUnderValue;
+            haPrice * quantity
+                < hideUnderValue;
 
         final boolean implicitlyHidden =
             canBeHidden
@@ -402,7 +457,8 @@ public class GroundItemIconsOverlay extends Overlay
         return !implicitlyHidden;
     }
 
-    private boolean ownershipMatches(TileItem item)
+    private boolean ownershipMatches(
+        TileItem item)
     {
         final String mode =
             getString(
@@ -416,22 +472,28 @@ public class GroundItemIconsOverlay extends Overlay
             client.getVarbitValue(
                 VarbitID.IRONMAN);
 
-        if ("DROPS".equalsIgnoreCase(mode))
+        if ("DROPS".equalsIgnoreCase(
+            mode))
         {
-            return ownership == TileItem.OWNERSHIP_SELF
-                || ownership == TileItem.OWNERSHIP_GROUP;
+            return ownership
+                == TileItem.OWNERSHIP_SELF
+                || ownership
+                == TileItem.OWNERSHIP_GROUP;
         }
 
-        if ("TAKEABLE".equalsIgnoreCase(mode))
+        if ("TAKEABLE".equalsIgnoreCase(
+            mode))
         {
-            return ownership != TileItem.OWNERSHIP_OTHER
+            return ownership
+                != TileItem.OWNERSHIP_OTHER
                 || accountType == 0;
         }
 
         return true;
     }
 
-    private boolean isPriceHighlighted(int value)
+    private boolean isPriceHighlighted(
+        int value)
     {
         return isAboveConfiguredThreshold(
                 value,
@@ -474,12 +536,14 @@ public class GroundItemIconsOverlay extends Overlay
                 "highlightValueCalculation",
                 "HIGHEST");
 
-        if ("GE".equalsIgnoreCase(mode))
+        if ("GE".equalsIgnoreCase(
+            mode))
         {
             return gePrice;
         }
 
-        if ("HA".equalsIgnoreCase(mode))
+        if ("HA".equalsIgnoreCase(
+            mode))
         {
             return haPrice;
         }
