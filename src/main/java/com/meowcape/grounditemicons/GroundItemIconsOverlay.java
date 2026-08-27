@@ -1,9 +1,12 @@
 package com.meowcape.grounditemicons;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,25 +109,50 @@ public class GroundItemIconsOverlay extends Overlay
             return null;
         }
 
-        final int iconSize =
+        final int configuredIconSize =
             Math.max(
-                1,
+                8,
                 Math.min(
                     config.iconSize(),
                     64));
 
-        final int iconGap =
-            config.iconPosition();
+        final int iconSize;
 
-        /*
-         * Ground Items calculates stack offsets from the global
-         * collected item collection, while maintaining a separate
-         * offset counter for each world location.
-         *
-         * We do the same here so that icon offsets use the same
-         * global collection ordering rather than relying on the
-         * ordering returned by a single tile's item collection.
-         */
+        if (config.scaleWithText())
+        {
+            iconSize =
+                Math.max(
+                    1,
+                    graphics.getFontMetrics().getHeight());
+        }
+        else
+        {
+            iconSize =
+                configuredIconSize;
+        }
+
+        final int iconGap =
+            config.iconGap();
+
+		final float opacity =
+			Math.max(
+				0,
+				Math.min(
+					config.iconOpacity(),
+					100))
+				/ 100.0f;
+
+        final Composite originalComposite =
+            graphics.getComposite();
+
+        if (opacity < 1.0f)
+        {
+            graphics.setComposite(
+                AlphaComposite.getInstance(
+                    AlphaComposite.SRC_OVER,
+                    opacity));
+        }
+
         final Map<WorldPoint, Map<Integer, Integer>> offsetMap =
             new HashMap<>();
 
@@ -140,21 +168,29 @@ public class GroundItemIconsOverlay extends Overlay
             final int quantity =
                 entry.getQuantity();
 
-            if (!shouldDisplayItem(
+            final WorldPoint worldPoint =
+                entry.getWorldPoint();
+
+            if (!groundItemsWouldDisplay(
                 item,
                 quantity))
             {
-                continue;
+                if (!config.showHiddenItems()
+                    || !isGroundItemsHidden(
+                        item,
+                        quantity))
+                {
+                    continue;
+                }
             }
-
-            final WorldPoint worldPoint =
-                entry.getWorldPoint();
 
             final int offset =
                 locationOffsets.compute(
                     worldPoint,
                     (k, v) ->
-                        v == null ? 0 : v + 1);
+                        v == null
+                            ? 0
+                            : v + 1);
 
             offsetMap
                 .computeIfAbsent(
@@ -234,25 +270,28 @@ public class GroundItemIconsOverlay extends Overlay
                         continue;
                     }
 
-                    final Map<Integer, GroundItemIconsEntry> entries =
-                        new HashMap<>();
+                    final Collection<GroundItemIconsEntry> entries =
+                        state.getItems(
+                            worldPoint);
 
                     for (GroundItemIconsEntry entry :
-                        state.getItems(worldPoint))
-                    {
-                        entries.put(
-                            entry.getItemId(),
-                            entry);
-                    }
-
-                    for (Map.Entry<Integer, GroundItemIconsEntry> entry :
-                        entries.entrySet())
+                        entries)
                     {
                         final int itemId =
-                            entry.getKey();
+                            entry.getItemId();
 
-                        final GroundItemIconsEntry iconEntry =
-                            entry.getValue();
+                        final TileItem item =
+                            entry.getItem();
+
+                        final int quantity =
+                            entry.getQuantity();
+
+                        if (!shouldDisplayIcon(
+                            item,
+                            quantity))
+                        {
+                            continue;
+                        }
 
                         final Integer offset =
                             itemOffsets.get(
@@ -262,12 +301,6 @@ public class GroundItemIconsOverlay extends Overlay
                         {
                             continue;
                         }
-
-                        final TileItem item =
-                            iconEntry.getItem();
-
-                        final int quantity =
-                            iconEntry.getQuantity();
 
                         final ItemComposition itemComposition =
                             itemManager.getItemComposition(
@@ -316,10 +349,25 @@ public class GroundItemIconsOverlay extends Overlay
                             textPoint.getY()
                                 - STRING_GAP * offset;
 
-                        final int iconX =
-                            textX
-                                - iconSize
-                                - iconGap;
+                        final int iconX;
+
+                        if (config.iconSide()
+                            == IconSide.RIGHT)
+                        {
+                            iconX =
+                                textX
+                                    + graphics.getFontMetrics()
+                                        .stringWidth(
+                                            itemString)
+                                    + iconGap;
+                        }
+                        else
+                        {
+                            iconX =
+                                textX
+                                    - iconSize
+                                    - iconGap;
+                        }
 
                         final int iconY =
                             textY
@@ -338,10 +386,13 @@ public class GroundItemIconsOverlay extends Overlay
             }
         }
 
+        graphics.setComposite(
+            originalComposite);
+
         return null;
     }
 
-    private boolean shouldDisplayItem(
+    private boolean groundItemsWouldDisplay(
         TileItem item,
         int quantity)
     {
@@ -359,10 +410,138 @@ public class GroundItemIconsOverlay extends Overlay
             return false;
         }
 
+        final int hiddenOrHighlighted =
+            getHiddenOrHighlighted(
+                item,
+                composition,
+                quantity);
+
+        if (hiddenOrHighlighted == HIGHLIGHTED)
+        {
+            return true;
+        }
+
+        if (hiddenOrHighlighted == HIDDEN)
+        {
+            return false;
+        }
+
+        if (groundItemsShowHighlightedOnly())
+        {
+            return isImplicitlyHighlighted(
+                item,
+                composition,
+                quantity);
+        }
+
+        return !isImplicitlyHidden(
+            item,
+            composition,
+            quantity);
+    }
+
+    private boolean shouldDisplayIcon(
+        TileItem item,
+        int quantity)
+    {
+        if (!ownershipMatches(item))
+        {
+            return false;
+        }
+
+        final ItemComposition composition =
+            itemManager.getItemComposition(
+                item.getId());
+
+        if (composition == null)
+        {
+            return false;
+        }
+
+        final int hiddenOrHighlighted =
+            getHiddenOrHighlighted(
+                item,
+                composition,
+                quantity);
+
+        if (hiddenOrHighlighted == HIGHLIGHTED)
+        {
+            return true;
+        }
+
+        if (hiddenOrHighlighted == HIDDEN)
+        {
+            return config.showHiddenItems();
+        }
+
+        if (!groundItemsWouldDisplay(
+            item,
+            quantity))
+        {
+            return false;
+        }
+
+        if (config.showHighlightedOnly()
+            && !isImplicitlyHighlighted(
+                item,
+                composition,
+                quantity))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isGroundItemsHidden(
+        TileItem item,
+        int quantity)
+    {
+        if (!ownershipMatches(item))
+        {
+            return false;
+        }
+
+        final ItemComposition composition =
+            itemManager.getItemComposition(
+                item.getId());
+
+        if (composition == null)
+        {
+            return false;
+        }
+
+        final int hiddenOrHighlighted =
+            getHiddenOrHighlighted(
+                item,
+                composition,
+                quantity);
+
+        if (hiddenOrHighlighted == HIGHLIGHTED)
+        {
+            return false;
+        }
+
+        if (hiddenOrHighlighted == HIDDEN)
+        {
+            return true;
+        }
+
+        return isImplicitlyHidden(
+            item,
+            composition,
+            quantity);
+    }
+
+    private int getHiddenOrHighlighted(
+        TileItem item,
+        ItemComposition composition,
+        int quantity)
+    {
         final String name =
             composition.getName();
 
-        final int match =
+        final int highlightedMatch =
             listMatch(
                 getString(
                     "highlightedItems",
@@ -378,16 +557,46 @@ public class GroundItemIconsOverlay extends Overlay
                 name,
                 quantity);
 
-        if (match != 0)
+        if (highlightedMatch == 2)
         {
-            return true;
+            return HIGHLIGHTED;
         }
 
-        if (hiddenMatch != 0)
+        if (hiddenMatch == 2)
         {
-            return false;
+            return HIDDEN;
         }
 
+        if (highlightedMatch == 1)
+        {
+            return HIGHLIGHTED;
+        }
+
+        if (hiddenMatch == 1)
+        {
+            return HIDDEN;
+        }
+
+        return NONE;
+    }
+
+    private boolean groundItemsShowHighlightedOnly()
+    {
+        final Boolean value =
+            configManager.getConfiguration(
+                GROUND_ITEMS_GROUP,
+                "showHighlightedOnly",
+                Boolean.class);
+
+        return value != null
+            && value;
+    }
+
+    private boolean isImplicitlyHighlighted(
+        TileItem item,
+        ItemComposition composition,
+        int quantity)
+    {
         final int realItemId =
             composition.getNote() != -1
                 ? composition.getLinkedNoteId()
@@ -395,12 +604,14 @@ public class GroundItemIconsOverlay extends Overlay
 
         final int gePrice =
             realItemId == ItemID.COINS
-                ? 1
+                ? quantity
                 : itemManager.getItemPrice(
-                    realItemId);
+                    realItemId)
+                    * quantity;
 
         final int haPrice =
-            composition.getHaPrice();
+            composition.getHaPrice()
+                * quantity;
 
         final boolean customColor =
             configManager.getConfiguration(
@@ -410,21 +621,34 @@ public class GroundItemIconsOverlay extends Overlay
 
         final int value =
             getValueByMode(
-                gePrice * quantity,
-                haPrice * quantity);
+                gePrice,
+                haPrice);
 
-        final boolean implicitlyHighlighted =
-            customColor
-                || isPriceHighlighted(
-                    value);
+        return customColor
+            || isPriceHighlighted(
+                value);
+    }
 
-        if (getBoolean(
-                "showHighlightedOnly",
-                false)
-            && !implicitlyHighlighted)
-        {
-            return false;
-        }
+    private boolean isImplicitlyHidden(
+        TileItem item,
+        ItemComposition composition,
+        int quantity)
+    {
+        final int realItemId =
+            composition.getNote() != -1
+                ? composition.getLinkedNoteId()
+                : item.getId();
+
+        final int gePrice =
+            realItemId == ItemID.COINS
+                ? quantity
+                : itemManager.getItemPrice(
+                    realItemId)
+                    * quantity;
+
+        final int haPrice =
+            composition.getHaPrice()
+                * quantity;
 
         final boolean dontHideUntradeables =
             getBoolean(
@@ -442,19 +666,16 @@ public class GroundItemIconsOverlay extends Overlay
                 0);
 
         final boolean underGe =
-            gePrice * quantity
+            gePrice
                 < hideUnderValue;
 
         final boolean underHa =
-            haPrice * quantity
+            haPrice
                 < hideUnderValue;
 
-        final boolean implicitlyHidden =
-            canBeHidden
-                && underGe
-                && underHa;
-
-        return !implicitlyHidden;
+        return canBeHidden
+            && underGe
+            && underHa;
     }
 
     private boolean ownershipMatches(
@@ -722,6 +943,10 @@ public class GroundItemIconsOverlay extends Overlay
             ? defaultValue
             : value;
     }
+
+    private static final int NONE = 0;
+    private static final int HIGHLIGHTED = 1;
+    private static final int HIDDEN = 2;
 
     private static final class ItemRule
     {
