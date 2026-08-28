@@ -14,21 +14,10 @@ public interface GroundItemIconsConfig extends Config
     String GROUP = "grounditemicons";
 
     @ConfigItem(
-        keyName = "showItemIcons",
-        name = "Show item icons",
-        description = "Display item icons next to Ground Items names.",
-        position = 0
-    )
-    default boolean showItemIcons()
-    {
-        return true;
-    }
-
-    @ConfigItem(
         keyName = "iconSize",
         name = "Item icon size",
         description = "Size of ground item icons in pixels.",
-        position = 1
+        position = 0
     )
     @Range(
         min = 8,
@@ -43,7 +32,7 @@ public interface GroundItemIconsConfig extends Config
         keyName = "iconSide",
         name = "Icon side",
         description = "Choose which side of the Ground Items text the icon is displayed on.",
-        position = 2
+        position = 1
     )
     default IconSide iconSide()
     {
@@ -54,37 +43,38 @@ public interface GroundItemIconsConfig extends Config
         keyName = "iconGap",
         name = "Icon gap",
         description = "Horizontal distance between the item icon and Ground Items text.",
+        position = 2
+    )
+    @Range(
+        min = 0,
+        max = 15
+    )
+    default int iconGap()
+    {
+        return 0;
+    }
+
+    @Alpha
+    @ConfigItem(
+        keyName = "iconOpacity",
+        name = "Icon opacity",
+        description = "Opacity of the item icons.",
         position = 3
     )
     @Range(
         min = 0,
-        max = 50
+        max = 100
     )
-    default int iconGap()
+    default int iconOpacity()
     {
-        return 1;
+        return 100;
     }
-
-	@ConfigItem(
-		keyName = "iconOpacity",
-		name = "Icon opacity",
-		description = "Opacity of the item icons.",
-		position = 4
-	)
-	@Range(
-		min = 0,
-		max = 100
-	)
-	default int iconOpacity()
-	{
-		return 100;
-	}
 
     @ConfigItem(
         keyName = "scaleWithText",
         name = "Scale icon with text",
         description = "Automatically size the icon to match the current Ground Items text height.",
-        position = 5
+        position = 4
     )
     default boolean scaleWithText()
     {
@@ -95,7 +85,7 @@ public interface GroundItemIconsConfig extends Config
         keyName = "showHighlightedOnly",
         name = "Show highlighted items only",
         description = "Only display icons for items on the Ground Items highlighted items list.",
-        position = 6
+        position = 5
     )
     default boolean showHighlightedOnly()
     {
@@ -106,7 +96,7 @@ public interface GroundItemIconsConfig extends Config
         keyName = "showHiddenItems",
         name = "Show icons for hidden items",
         description = "Display icons for items hidden by the Ground Items hidden items list.",
-        position = 7
+        position = 6
     )
     default boolean showHiddenItems()
     {
@@ -117,7 +107,7 @@ public interface GroundItemIconsConfig extends Config
         keyName = "doubleTapDelay",
         name = "Double-tap delay",
         description = "Delay for the double-tap hotkey to hide item icons. 0 to disable.",
-        position = 8
+        position = 7
     )
     @Units(Units.MILLISECONDS)
     @Range(
@@ -132,8 +122,8 @@ public interface GroundItemIconsConfig extends Config
     @ConfigItem(
         keyName = "hotkey",
         name = "Hotkey",
-        description = "Configures the hotkey used by the Ground Item Icons plugin. Cannot be the same as Ground Icons hotkey.",
-        position = 9
+        description = "Configures the hotkey used by the Ground Item Icons plugin. Cannot be the same as Ground Items.",
+        position = 8
     )
     default Keybind hotkey()
     {

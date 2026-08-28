@@ -13,9 +13,11 @@ import java.util.Map;
 import javax.inject.Inject;
 
 import net.runelite.api.Client;
+import net.runelite.api.Constants;
 import net.runelite.api.ItemComposition;
 import net.runelite.api.Perspective;
 import net.runelite.api.Scene;
+import net.runelite.api.SpritePixels;
 import net.runelite.api.Tile;
 import net.runelite.api.TileItem;
 import net.runelite.api.WorldView;
@@ -23,6 +25,7 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.VarbitID;
+import net.runelite.api.widgets.ItemQuantityMode;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.overlay.Overlay;
@@ -39,12 +42,17 @@ public class GroundItemIconsOverlay extends Overlay
     private static final int MAX_DISTANCE = 2500;
     private static final int OFFSET_Z = 20;
     private static final int STRING_GAP = 15;
+    private static final int RUNE_ICON_SIZE_REDUCTION = 2;
+    private static final int MAX_SPRITE_CACHE_SIZE = 256;
 
     private final Client client;
     private final ItemManager itemManager;
     private final GroundItemIconsConfig config;
     private final ConfigManager configManager;
     private final GroundItemIconsState state;
+
+    private final Map<SpriteKey, BufferedImage> spriteCache =
+        new HashMap<>();
 
     @Inject
     private GroundItemIconsOverlay(
@@ -67,11 +75,6 @@ public class GroundItemIconsOverlay extends Overlay
     @Override
     public Dimension render(Graphics2D graphics)
     {
-        if (!config.showItemIcons())
-        {
-            return null;
-        }
-
         if (state.isHidden())
         {
             return null;
@@ -110,37 +113,19 @@ public class GroundItemIconsOverlay extends Overlay
         }
 
         final int configuredIconSize =
-            Math.max(
-                8,
-                Math.min(
-                    config.iconSize(),
-                    64));
-
-        final int iconSize;
-
-        if (config.scaleWithText())
-        {
-            iconSize =
-                Math.max(
-                    1,
-                    graphics.getFontMetrics().getHeight());
-        }
-        else
-        {
-            iconSize =
-                configuredIconSize;
-        }
+            getConfiguredIconSize(
+                graphics);
 
         final int iconGap =
             config.iconGap();
 
-		final float opacity =
-			Math.max(
-				0,
-				Math.min(
-					config.iconOpacity(),
-					100))
-				/ 100.0f;
+        final float opacity =
+            Math.max(
+                0,
+                Math.min(
+                    config.iconOpacity(),
+                    100))
+                / 100.0f;
 
         final Composite originalComposite =
             graphics.getComposite();
@@ -334,13 +319,19 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final BufferedImage image =
-                            itemManager.getImage(
-                                itemId);
+                            getItemSprite(
+                                itemId,
+                                quantity);
 
                         if (image == null)
                         {
                             continue;
                         }
+
+                        final int iconSize =
+                            getIconSize(
+                                itemComposition,
+                                configuredIconSize);
 
                         final int textX =
                             textPoint.getX();
@@ -349,30 +340,43 @@ public class GroundItemIconsOverlay extends Overlay
                             textPoint.getY()
                                 - STRING_GAP * offset;
 
-                        final int iconX;
+                        final int iconCenterX;
 
                         if (config.iconSide()
                             == IconSide.RIGHT)
                         {
-                            iconX =
+                            iconCenterX =
                                 textX
                                     + graphics.getFontMetrics()
                                         .stringWidth(
                                             itemString)
-                                    + iconGap;
+                                    + iconGap
+                                    + configuredIconSize / 2;
                         }
                         else
                         {
-                            iconX =
+                            iconCenterX =
                                 textX
-                                    - iconSize
-                                    - iconGap;
+                                    - iconGap
+                                    - configuredIconSize / 2;
                         }
 
-                        final int iconY =
+                        final int textCenterY =
                             textY
-                                - iconSize
-                                + 2;
+                                - (
+                                    graphics.getFontMetrics()
+                                        .getAscent()
+                                    + graphics.getFontMetrics()
+                                        .getDescent()
+                                ) / 2;
+
+                        final int iconX =
+                            iconCenterX
+                                - iconSize / 2;
+
+                        final int iconY =
+                            textCenterY
+                                - iconSize / 2;
 
                         graphics.drawImage(
                             image,
@@ -390,6 +394,115 @@ public class GroundItemIconsOverlay extends Overlay
             originalComposite);
 
         return null;
+    }
+
+    private BufferedImage getItemSprite(
+        int itemId,
+        int quantity)
+    {
+        final ItemComposition composition =
+            itemManager.getItemComposition(
+                itemId);
+
+        if (composition == null)
+        {
+            return null;
+        }
+
+        final SpriteKey key =
+            new SpriteKey(
+                itemId,
+                quantity);
+
+        BufferedImage cached =
+            spriteCache.get(
+                key);
+
+        if (cached != null)
+        {
+            return cached;
+        }
+
+        final SpritePixels sprite =
+            client.createItemSprite(
+                itemId,
+                quantity,
+                1,
+                SpritePixels.DEFAULT_SHADOW_COLOR,
+                ItemQuantityMode.NEVER,
+                false,
+                Constants.CLIENT_DEFAULT_ZOOM);
+
+        if (sprite == null)
+        {
+            return null;
+        }
+
+        final BufferedImage image =
+            new BufferedImage(
+                Constants.ITEM_SPRITE_WIDTH,
+                Constants.ITEM_SPRITE_HEIGHT,
+                BufferedImage.TYPE_INT_ARGB);
+
+        sprite.toBufferedImage(
+            image);
+
+        if (spriteCache.size()
+            >= MAX_SPRITE_CACHE_SIZE)
+        {
+            spriteCache.clear();
+        }
+
+        spriteCache.put(
+            key,
+            image);
+
+        return image;
+    }
+
+    private int getConfiguredIconSize(
+        Graphics2D graphics)
+    {
+        if (config.scaleWithText())
+        {
+            return Math.max(
+                1,
+                graphics.getFontMetrics()
+                    .getHeight());
+        }
+
+        return Math.max(
+            8,
+            Math.min(
+                config.iconSize(),
+                64));
+    }
+
+    private int getIconSize(
+        ItemComposition composition,
+        int configuredIconSize)
+    {
+        if (isRune(
+            composition))
+        {
+            return Math.max(
+                1,
+                configuredIconSize
+                    - RUNE_ICON_SIZE_REDUCTION);
+        }
+
+        return configuredIconSize;
+    }
+
+    private boolean isRune(
+        ItemComposition composition)
+    {
+        final String name =
+            composition.getName();
+
+        return name != null
+            && name.toLowerCase()
+                .endsWith(" rune");
     }
 
     private boolean groundItemsWouldDisplay(
@@ -436,7 +549,6 @@ public class GroundItemIconsOverlay extends Overlay
 
         return !isImplicitlyHidden(
             item,
-            composition,
             quantity);
     }
 
@@ -529,7 +641,6 @@ public class GroundItemIconsOverlay extends Overlay
 
         return isImplicitlyHidden(
             item,
-            composition,
             quantity);
     }
 
@@ -625,15 +736,22 @@ public class GroundItemIconsOverlay extends Overlay
                 haPrice);
 
         return customColor
-            || isPriceHighlighted(
-                value);
+            || isPriceHighlighted(value);
     }
 
     private boolean isImplicitlyHidden(
         TileItem item,
-        ItemComposition composition,
         int quantity)
     {
+        final ItemComposition composition =
+            itemManager.getItemComposition(
+                item.getId());
+
+        if (composition == null)
+        {
+            return false;
+        }
+
         final int realItemId =
             composition.getNote() != -1
                 ? composition.getLinkedNoteId()
@@ -801,10 +919,12 @@ public class GroundItemIconsOverlay extends Overlay
 
             final int gePrice =
                 itemManager.getItemPrice(
-                    realItemId);
+                    realItemId)
+                    * quantity;
 
             final int haPrice =
-                composition.getHaPrice();
+                composition.getHaPrice()
+                    * quantity;
 
             final String displayMode =
                 getString(
@@ -947,6 +1067,56 @@ public class GroundItemIconsOverlay extends Overlay
     private static final int NONE = 0;
     private static final int HIGHLIGHTED = 1;
     private static final int HIDDEN = 2;
+
+    private static final class SpriteKey
+    {
+        private final int itemId;
+        private final int quantity;
+
+        private SpriteKey(
+            int itemId,
+            int quantity)
+        {
+            this.itemId = itemId;
+            this.quantity = quantity;
+        }
+
+        @Override
+        public boolean equals(
+            Object object)
+        {
+            if (this == object)
+            {
+                return true;
+            }
+
+            if (!(object instanceof SpriteKey))
+            {
+                return false;
+            }
+
+            final SpriteKey other =
+                (SpriteKey) object;
+
+            return itemId == other.itemId
+                && quantity == other.quantity;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            int result =
+                Integer.hashCode(
+                    itemId);
+
+            result =
+                31 * result
+                    + Integer.hashCode(
+                        quantity);
+
+            return result;
+        }
+    }
 
     private static final class ItemRule
     {
