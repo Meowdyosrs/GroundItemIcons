@@ -138,7 +138,7 @@ public class GroundItemIconsOverlay extends Overlay
                     opacity));
         }
 
-        final Map<WorldPoint, Map<Integer, Integer>> offsetMap =
+        final Map<GroundItemIconsEntry, Integer> offsetMap =
             new HashMap<>();
 
         final Map<WorldPoint, Integer> locationOffsets =
@@ -177,13 +177,9 @@ public class GroundItemIconsOverlay extends Overlay
                             ? 0
                             : v + 1);
 
-            offsetMap
-                .computeIfAbsent(
-                    worldPoint,
-                    k -> new HashMap<>())
-                .put(
-                    entry.getItemId(),
-                    offset);
+            offsetMap.put(
+                entry,
+                offset);
         }
 
         for (int plane = 0;
@@ -245,16 +241,6 @@ public class GroundItemIconsOverlay extends Overlay
                         continue;
                     }
 
-                    final Map<Integer, Integer> itemOffsets =
-                        offsetMap.get(
-                            worldPoint);
-
-                    if (itemOffsets == null
-                        || itemOffsets.isEmpty())
-                    {
-                        continue;
-                    }
-
                     final Collection<GroundItemIconsEntry> entries =
                         state.getItems(
                             worldPoint);
@@ -279,8 +265,8 @@ public class GroundItemIconsOverlay extends Overlay
                         }
 
                         final Integer offset =
-                            itemOffsets.get(
-                                itemId);
+                            offsetMap.get(
+                                entry);
 
                         if (offset == null)
                         {
@@ -1197,9 +1183,9 @@ public class GroundItemIconsOverlay extends Overlay
                                 0,
                                 i);
                     }
-                }
 
-                break;
+                    break;
+                }
             }
 
             return new ItemRule(

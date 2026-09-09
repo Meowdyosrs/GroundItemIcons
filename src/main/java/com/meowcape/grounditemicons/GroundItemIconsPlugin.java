@@ -3,13 +3,12 @@ package com.meowcape.grounditemicons;
 import com.google.inject.Provides;
 import javax.inject.Inject;
 
+import net.runelite.api.GameState;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.ItemDespawned;
 import net.runelite.api.events.ItemQuantityChanged;
 import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.events.WorldViewUnloaded;
-import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.GameState;
-
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.input.KeyManager;
@@ -40,9 +39,6 @@ public class GroundItemIconsPlugin extends Plugin
     @Inject
     private KeyManager keyManager;
 
-    @Inject
-    private net.runelite.api.Client client;
-
     @Provides
     GroundItemIconsConfig provideConfig(ConfigManager configManager)
     {
@@ -61,8 +57,6 @@ public class GroundItemIconsPlugin extends Plugin
 
         overlayManager.add(
             overlay);
-
-        populateCurrentWorldView();
     }
 
     @Override
@@ -118,23 +112,9 @@ public class GroundItemIconsPlugin extends Plugin
     public void onGameStateChanged(
         GameStateChanged event)
     {
-        if (event.getGameState() == GameState.LOGGED_IN)
+        if (event.getGameState() == GameState.LOGIN_SCREEN)
         {
-            populateCurrentWorldView();
-        }
-    }
-
-    private void populateCurrentWorldView()
-    {
-        state.clear();
-
-        final net.runelite.api.WorldView worldView =
-            client.getTopLevelWorldView();
-
-        if (worldView != null)
-        {
-            state.populateFromScene(
-                worldView);
+            state.clear();
         }
     }
 }
