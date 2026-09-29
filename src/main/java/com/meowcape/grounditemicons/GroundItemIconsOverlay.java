@@ -699,14 +699,14 @@ public class GroundItemIconsOverlay extends Overlay
                 ? composition.getLinkedNoteId()
                 : item.getId();
 
-        final int gePrice =
+        final long gePrice =
             realItemId == ItemID.COINS
                 ? quantity
                 : itemManager.getItemPrice(
                     realItemId)
                     * quantity;
 
-        final int haPrice =
+        final long haPrice =
             composition.getHaPrice()
                 * quantity;
 
@@ -716,7 +716,7 @@ public class GroundItemIconsOverlay extends Overlay
                 ICON_COLOR_PREFIX + item.getId(),
                 Color.class) != null;
 
-        final int value =
+        final long value =
             getValueByMode(
                 gePrice,
                 haPrice);
@@ -743,14 +743,14 @@ public class GroundItemIconsOverlay extends Overlay
                 ? composition.getLinkedNoteId()
                 : item.getId();
 
-        final int gePrice =
+        final long gePrice =
             realItemId == ItemID.COINS
                 ? quantity
                 : itemManager.getItemPrice(
                     realItemId)
                     * quantity;
 
-        final int haPrice =
+        final long haPrice =
             composition.getHaPrice()
                 * quantity;
 
@@ -818,7 +818,7 @@ public class GroundItemIconsOverlay extends Overlay
     }
 
     private boolean isPriceHighlighted(
-        int value)
+        long value)
     {
         return isAboveConfiguredThreshold(
                 value,
@@ -839,7 +839,7 @@ public class GroundItemIconsOverlay extends Overlay
     }
 
     private boolean isAboveConfiguredThreshold(
-        int value,
+        long value,
         String key,
         int defaultValue)
     {
@@ -852,9 +852,9 @@ public class GroundItemIconsOverlay extends Overlay
             && value > threshold;
     }
 
-    private int getValueByMode(
-        int gePrice,
-        int haPrice)
+    private long getValueByMode(
+        long gePrice,
+        long haPrice)
     {
         final String mode =
             getString(
@@ -903,12 +903,12 @@ public class GroundItemIconsOverlay extends Overlay
                     ? composition.getLinkedNoteId()
                     : item.getId();
 
-            final int gePrice =
+            final long gePrice =
                 itemManager.getItemPrice(
                     realItemId)
                     * quantity;
 
-            final int haPrice =
+            final long haPrice =
                 composition.getHaPrice()
                     * quantity;
 
@@ -941,7 +941,7 @@ public class GroundItemIconsOverlay extends Overlay
             else if (!"OFF".equalsIgnoreCase(
                 displayMode))
             {
-                final int price =
+                final long price =
                     "GE".equalsIgnoreCase(
                         displayMode)
                         ? gePrice
