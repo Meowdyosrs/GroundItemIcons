@@ -2,6 +2,8 @@
 
 Standalone RuneLite plugin that works alongside the Ground Items plugin to display item icons next to Ground Items text.
 
+![Screenshot](img/screenshot.png)
+
 ## Features
 - Displays item icons next to Ground Items.
 - Respects Ground Items filtering and hidden items.
